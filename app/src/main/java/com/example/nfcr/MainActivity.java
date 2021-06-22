@@ -34,6 +34,7 @@ public class MainActivity extends AppCompatActivity {
     String[][] techListsArray;
     IntentFilter[] intentFiltersArray;
     PendingIntent pendingIntent;
+    Tag tag = null;
     private Handler handler = new Handler(Looper.myLooper()) {
         @Override
         public void handleMessage(Message msg) {
@@ -44,6 +45,10 @@ public class MainActivity extends AppCompatActivity {
                 String strAscii = (String) bundle.getString("ASCII");
                 nfcTextView.append("hex:" + hex + "\r\n");
                 nfcTextView.append("ASCII:" + strAscii + "\r\n");
+            }
+            if (msg.what == 2) {
+                String text = (String) msg.obj;
+                nfcTextView.append(text);
             }
         }
     };
@@ -92,14 +97,11 @@ public class MainActivity extends AppCompatActivity {
         buttonWriteIn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Intent intent = getIntent(); //todo: add button handler for write data to nfc
+                if (tag != null)
+                    writeNfcA(tag, nfcEditText.getText().toString());
             }
         });
 
-//        Intent intent = this.getIntent();
-//        Tag tag = parseIntent(intent);
-//        if (tag != null )
-//            readNfcA(tag);
     }
 
 
@@ -158,7 +160,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    public void writeNfcA(Tag tag, String message) {
+    public void writeNfcA(Tag tag, String nfcCode) {
         NfcA nfca = NfcA.get(tag);
         if (nfca != null)
             Log.e("e_bl", nfca.toString());
@@ -169,19 +171,34 @@ public class MainActivity extends AppCompatActivity {
                     nfca.connect();
                     Log.d("h_bl", String.valueOf(nfca.getMaxTransceiveLength()));
                     Log.d("h_bl", String.valueOf(nfca.getSak()));
-                    byte[] messageBytes = message.getBytes(StandardCharsets.US_ASCII);
-                    byte[] writeCmd = {(byte) 0xA2, (byte) 0x06}; //todo: add next page logic
+                    byte[] messageBytes = nfcCode.getBytes(StandardCharsets.US_ASCII);
                     byte[] WRITE = new byte[6];
-                    //写命令后面只能跟4个字节
-                    for (int i = 1; i <= Math.ceil(messageBytes.length / 4); i++) {
+
+                    /**Empty the page from 6 to 30**/
+                    for (int page = 6; page <= 30; page++) {
                         byte[] defaultBytes = {(byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00};
-                        int len = i == Math.ceil(messageBytes.length / 4) ? messageBytes.length % 4 : 4;
+                        byte[] writeCmd = {(byte) 0xA2, (byte) page};
                         System.arraycopy(writeCmd, 0, WRITE, 0, writeCmd.length);
-                        System.arraycopy(messageBytes, 4 * (i - 1), defaultBytes, 0, len);
+                        System.arraycopy(defaultBytes, 0, WRITE, writeCmd.length, defaultBytes.length);
+                        nfca.transceive(WRITE);
+                    }
+                    int totalStep = (int) Math.ceil((double) messageBytes.length / 4.0);
+                    //写命令后面只能跟4个字节
+                    for (int step = 1, page = 6; step <= totalStep; step++, page++) {
+                        Log.d("step", String.valueOf(step));
+                        byte[] writeCmd = {(byte) 0xA2, (byte) page};
+                        byte[] defaultBytes = {(byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00};
+                        int len = step == totalStep && (messageBytes.length % 4 != 0)? messageBytes.length % 4 : 4;
+                        System.arraycopy(writeCmd, 0, WRITE, 0, writeCmd.length);
+                        System.arraycopy(messageBytes, 4 * (step - 1), defaultBytes, 0, len);
                         System.arraycopy(defaultBytes, 0, WRITE, writeCmd.length, defaultBytes.length);
                         Log.d("h_w", byte2HexString(WRITE));
                         nfca.transceive(WRITE);
                     }
+                    Message message = Message.obtain();
+                    message.obj = nfcCode+" Forged!";
+                    message.what = 2;
+                    handler.sendMessage(message);
                     nfca.close();
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -209,10 +226,10 @@ public class MainActivity extends AppCompatActivity {
         Log.d("h_bl", intent.getAction());
         if (NfcAdapter.ACTION_TECH_DISCOVERED.equals(intent.getAction())) {
             Log.d("h_bl", "onNewIntent");
-            Tag tag = parseIntent(intent);
+            tag = parseIntent(intent);
             if (tag != null)
-                writeNfcA(tag, "helloworld");
-            //readNfcA(tag);
+//                writeNfcA(tag, "helloworld");
+                readNfcA(tag);
         }
     }
 
