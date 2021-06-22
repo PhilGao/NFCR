@@ -5,8 +5,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import android.app.PendingIntent;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.nfc.NdefMessage;
-import android.nfc.NdefRecord;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.nfc.tech.IsoDep;
@@ -15,40 +13,63 @@ import android.nfc.tech.NfcB;
 import android.nfc.tech.NfcF;
 import android.nfc.tech.NfcV;
 import android.os.Bundle;
-import android.os.Parcelable;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Message;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.nio.charset.Charset;
-import java.util.Arrays;
+import java.nio.charset.StandardCharsets;
 
 public class MainActivity extends AppCompatActivity {
     public static final String EXTRA_MESSAGE = "com.example.myfirstapp.MESSAGE";
     NfcAdapter nfcAdapter;
-    TextView nfcTView;
-    String readResult;
+    TextView nfcTextView;
+    EditText nfcEditText;
+    Button buttonWriteIn;
     String[][] techListsArray;
     IntentFilter[] intentFiltersArray;
     PendingIntent pendingIntent;
+    private Handler handler = new Handler(Looper.myLooper()) {
+        @Override
+        public void handleMessage(Message msg) {
+            if (msg.what == 1) {
+                Bundle bundle = msg.getData();
+                Log.d("h_bl", bundle.toString());
+                String hex = (String) bundle.getString("hex");
+                String strAscii = (String) bundle.getString("ASCII");
+                nfcTextView.append("hex:" + hex + "\r\n");
+                nfcTextView.append("ASCII:" + strAscii + "\r\n");
+            }
+        }
+    };
 
+    public static String byte2HexString(byte[] bytes) {
+        String hex = "";
+        if (bytes != null) {
+            for (Byte b : bytes) {
+                hex += String.format("%02X", b.intValue() & 0xFF);
+            }
+        }
+        return hex;
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        nfcTView = (TextView) findViewById(R.id.textViewNFC);
+        nfcTextView = (TextView) findViewById(R.id.textViewNFC);
+        nfcEditText = (EditText) findViewById(R.id.editTextNFC);
+        buttonWriteIn = (Button) findViewById(R.id.buttonWriteIn);
         techListsArray = new String[][]{{NfcA.class.getName()}, {NfcB.class.getName()}, {IsoDep.class.getName()}, {NfcV.class.getName()}, {NfcF.class.getName()},};
 
-        IntentFilter ndef = new IntentFilter(NfcAdapter.ACTION_TECH_DISCOVERED);
+        IntentFilter ndef = new IntentFilter(NfcAdapter.ACTION_NDEF_DISCOVERED);
         try {
-            ndef.addDataType("*/*");    /* Handles all MIME based dispatches.
-                                       You should specify only the ones that you need. */
+            ndef.addDataType("*/*");
         } catch (IntentFilter.MalformedMimeTypeException e) {
             throw new RuntimeException("fail", e);
         }
@@ -64,82 +85,113 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         if (nfcAdapter != null && !nfcAdapter.isEnabled()) {
-            Toast.makeText(getApplicationContext(), "Please open nfc", Toast.LENGTH_SHORT);
+            nfcTextView.setText("Please open nfc");
             Log.d("h_bl", "Not Open NFC");
             return;
         }
-        Intent intent = this.getIntent();
-        parseIntent(intent);
+        buttonWriteIn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = getIntent(); //todo: add button handler for write data to nfc
+            }
+        });
+
+//        Intent intent = this.getIntent();
+//        Tag tag = parseIntent(intent);
+//        if (tag != null )
+//            readNfcA(tag);
     }
 
 
-    public void parseIntent(Intent intent) {
+    public Tag parseIntent(Intent intent) {
         String nfcAction = intent.getAction();
         if (NfcAdapter.ACTION_TECH_DISCOVERED.equals(nfcAction)) {
             Log.d("h_bl", "ACTION_TECH_DISCOVERED");
             Tag tag = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG); // 获取Tag标签，既可以处理相关信息
             Log.d("h_bl", "id = " + tag.getId());
+            nfcTextView.setText(null);
             for (String tech : tag.getTechList()) {
                 Log.d("h_bl", "tech=" + tech);
             }
-            //readNfcA(tag);
-            readNfcIsoDep(tag);
+            return tag;
         }
-//        if (NfcAdapter.EXTRA_NDEF_MESSAGES.equals(nfcAction)) {
-//            Log.d("h_bl", "EXTRA_NDEF_MESSAGES");
-//            Parcelable[] rawArray = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES);
-//            NdefMessage mNdefMsg = (NdefMessage) rawArray[0];
-//            NdefRecord mNdefRecord = mNdefMsg.getRecords()[0];
-//            try {
-//                if (mNdefRecord != null) {
-//                    readResult = new String(mNdefRecord.getPayload(), "UTF-8");
-//                }
-//            } catch (UnsupportedEncodingException e) {
-//                e.printStackTrace();
-//            }
-//            ;
-//        }
+        return null;
     }
 
 
     public void readNfcA(Tag tag) {
         NfcA nfca = NfcA.get(tag);
-        try {
-            nfca.connect();
-            Log.d("h_bl", String.valueOf(nfca.getMaxTransceiveLength()));
-            Log.d("h_bl", String.valueOf(nfca.getSak()));
-            byte[] SELECT = {
-                    (byte) 0x30,
-            };
-            byte[] response = nfca.transceive(SELECT);
-            nfca.close();
-            if (response != null) {
-                Log.d("h_bl", new String(response, Charset.forName("utf-8")));
+        if (nfca != null)
+            Log.d("h_bl", nfca.toString());
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    nfca.connect();
+                    Log.d("h_bl", String.valueOf(nfca.getMaxTransceiveLength()));
+                    Log.d("h_bl", String.valueOf(nfca.getSak()));
+                    //读取06之后的4个字节
+                    byte[] SELECT = {
+                            (byte) 0x3A,
+                            (byte) 0x06,
+                            (byte) 0x27,
+                    };
+                    byte[] response = nfca.transceive(SELECT);
+                    if (response != null) {
+                        Log.d("h_bl", new String(response));
+                        Log.d("h_bl", byte2HexString(response));
+                        Bundle bundle = new Bundle();
+                        bundle.putString("hex", byte2HexString(response));
+                        bundle.putString("ASCII", new String(response));
+                        Message message = Message.obtain();
+                        message.setData(bundle);
+                        message.what = 1;
+                        handler.sendMessage(message);
+                    }
+                    nfca.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
 
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        }).start();
     }
 
-    public void readNfcIsoDep(Tag tag) {
-        IsoDep isoDep = IsoDep.get(tag);
-        try {
-            isoDep.connect();
-            Log.d("h_bl", String.valueOf(isoDep.getMaxTransceiveLength()));
-            byte[] SELECT = {
-                    (byte) 0x30,
-            };
-            byte[] response = isoDep.transceive(SELECT);
-            isoDep.close();
-            if (response != null) {
-                Log.d("h_bl", new String(response, Charset.forName("utf-8")));
+
+    public void writeNfcA(Tag tag, String message) {
+        NfcA nfca = NfcA.get(tag);
+        if (nfca != null)
+            Log.e("e_bl", nfca.toString());
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    nfca.connect();
+                    Log.d("h_bl", String.valueOf(nfca.getMaxTransceiveLength()));
+                    Log.d("h_bl", String.valueOf(nfca.getSak()));
+                    byte[] messageBytes = message.getBytes(StandardCharsets.US_ASCII);
+                    byte[] writeCmd = {(byte) 0xA2, (byte) 0x06}; //todo: add next page logic
+                    byte[] WRITE = new byte[6];
+                    //写命令后面只能跟4个字节
+                    for (int i = 1; i <= Math.ceil(messageBytes.length / 4); i++) {
+                        byte[] defaultBytes = {(byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00};
+                        int len = i == Math.ceil(messageBytes.length / 4) ? messageBytes.length % 4 : 4;
+                        System.arraycopy(writeCmd, 0, WRITE, 0, writeCmd.length);
+                        System.arraycopy(messageBytes, 4 * (i - 1), defaultBytes, 0, len);
+                        System.arraycopy(defaultBytes, 0, WRITE, writeCmd.length, defaultBytes.length);
+                        Log.d("h_w", byte2HexString(WRITE));
+                        nfca.transceive(WRITE);
+                    }
+                    nfca.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
 
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        }).start();
+
     }
+
 
     public void onPause() {
         super.onPause();
@@ -157,13 +209,16 @@ public class MainActivity extends AppCompatActivity {
         Log.d("h_bl", intent.getAction());
         if (NfcAdapter.ACTION_TECH_DISCOVERED.equals(intent.getAction())) {
             Log.d("h_bl", "onNewIntent");
-            parseIntent(intent);
+            Tag tag = parseIntent(intent);
+            if (tag != null)
+                writeNfcA(tag, "helloworld");
+            //readNfcA(tag);
         }
     }
 
     public void sendMessage(View view) {
         Intent intent = new Intent(this, DisplayMessageActivity.class);
-        EditText editText = (EditText) findViewById(R.id.editTextTextPersonName);
+        EditText editText = (EditText) findViewById(R.id.editTextNFC);
         String message = editText.getText().toString();
         intent.putExtra(EXTRA_MESSAGE, message);
         startActivity(intent);
