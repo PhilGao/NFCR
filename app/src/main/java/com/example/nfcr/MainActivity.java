@@ -30,6 +30,7 @@ import android.widget.Toast;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 public class MainActivity extends AppCompatActivity {
     public static final String EXTRA_MESSAGE = "com.example.myfirstapp.MESSAGE";
@@ -108,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
         buttonWriteIn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (tag != null) {
+                if (tag != null & Arrays.asList(tag.getTechList()).contains("android.nfc.tech.Ndef")) {
                     /**写入格式例如 aaaaa:1 ,如果没有指定:1,则使用测试URL*/
                     int urlIndex = 0;
                     String text = nfcEditText.getText().toString();
@@ -120,7 +121,7 @@ public class MainActivity extends AppCompatActivity {
                     /*写入NFC*/
                     if (urlIndex > ADAMA_URL.length - 1 || urlIndex < 0)
                         Toast.makeText(MainActivity.this,
-                                "url index is invalid , the url index must between 0 and " + String.valueOf(ADAMA_URL.length-1)
+                                "url index is invalid , the url index must between 0 and " + String.valueOf(ADAMA_URL.length - 1)
                                 , Toast.LENGTH_SHORT).show();
                     else {
                         writeNedf(tag, text, urlIndex);
@@ -140,9 +141,6 @@ public class MainActivity extends AppCompatActivity {
             Tag tag = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG); // 获取Tag标签，既可以处理相关信息
             Log.d("h_bl", "id = " + tag.getId());
             nfcTextView.setText(null);
-            for (String tech : tag.getTechList()) {
-                Log.d("h_bl", "tech=" + tech);
-            }
             return tag;
         }
         return null;
@@ -181,6 +179,7 @@ public class MainActivity extends AppCompatActivity {
                     nfca.close();
                 } catch (IOException e) {
                     e.printStackTrace();
+                    Toast.makeText(MainActivity.this,e.getMessage(),Toast.LENGTH_SHORT).show();
                 }
 
             }
@@ -216,6 +215,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                     ndef.close();
                 } catch (IOException | FormatException e) {
+                    Toast.makeText(MainActivity.this,e.getMessage(),Toast.LENGTH_SHORT).show();
                     e.printStackTrace();
                 }
 
@@ -291,11 +291,12 @@ public class MainActivity extends AppCompatActivity {
 
                     ndef.writeNdefMessage(ndefMessage);
                     Message message = Message.obtain();
-                    message.obj = nfcCode+";" +url+ " Forged!";
+                    message.obj = nfcCode + ";" + url + " Forged!";
                     message.what = 2;
                     handler.sendMessage(message);
                     ndef.close();
                 } catch (IOException | FormatException e) {
+                    Toast.makeText(MainActivity.this,e.getMessage(),Toast.LENGTH_SHORT).show();
                     e.printStackTrace();
                 }
             }
@@ -319,9 +320,16 @@ public class MainActivity extends AppCompatActivity {
         if (NfcAdapter.ACTION_TECH_DISCOVERED.equals(intent.getAction())) {
             Log.d("h_bl", "onNewIntent");
             tag = parseIntent(intent);
-            if (tag != null)
+            if (tag != null) {
 //                writeNfcA(tag, "helloworld");
-                readNedf(tag);
+                if (Arrays.asList(tag.getTechList()).contains("android.nfc.tech.Ndef")) {
+                    readNedf(tag);
+                    return;
+                } else if (Arrays.asList(tag.getTechList()).contains("android.nfc.tech.NfcA")) {
+                    readNfcA(tag);
+                    return;
+                } else return;
+            }
         }
     }
 
