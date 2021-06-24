@@ -34,8 +34,8 @@ import java.util.Arrays;
 public class MainActivity extends AppCompatActivity {
     public static final String[] ADAMA_URL = {
             "https://cn.bing.com",
-            "https://itodemosga01.z13.web.core.windows.net/apollo.html",
-            "https://itodemosga01.z13.web.core.windows.net/apollo.html"
+            "https://iotdemosga01.z13.web.core.windows.net/kohinor.html",
+            "https://iotdemosga01.z13.web.core.windows.net/badge.html"
     };
     NfcAdapter nfcAdapter;
     TextView nfcTextView;
