@@ -27,7 +27,12 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+
+import com.microsoft.azure.sdk.iot.device.DeviceClient;
+import com.microsoft.azure.sdk.iot.device.IotHubClientProtocol;
+
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
@@ -37,6 +42,13 @@ public class MainActivity extends AppCompatActivity {
             "https://iotdemosga01.z13.web.core.windows.net/kohinor.html",
             "https://iotdemosga01.z13.web.core.windows.net/badge.html"
     };
+
+    private final String connString = "HostName=myiotdemo.azure-devices.net;DeviceId=pos01;SharedAccessKey=9fb5GUjjCZNRFXKqtI6+9A6Bqmdb75ijRxDLei64VWk=";
+    // BuildConfig.DeviceConnectionString;
+    private DeviceClient client;
+    IotHubClientProtocol protocol = IotHubClientProtocol.MQTT;
+
+
     NfcAdapter nfcAdapter;
     TextView nfcTextView;
     EditText nfcEditText;
@@ -45,7 +57,7 @@ public class MainActivity extends AppCompatActivity {
     IntentFilter[] intentFiltersArray;
     PendingIntent pendingIntent;
     Tag tag = null;
-    private Handler handler = new Handler(Looper.myLooper()) {
+    private final Handler handler = new Handler(Looper.myLooper()) {
         @Override
         public void handleMessage(Message msg) {
             if (msg.what == 1) {
@@ -130,6 +142,9 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+    private void initClient() throws URISyntaxException {
+        client = new DeviceClient(connString, protocol);
+    }
 
     public Tag parseIntent(Intent intent) {
         String nfcAction = intent.getAction();

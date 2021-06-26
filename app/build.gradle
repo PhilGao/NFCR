@@ -26,6 +26,18 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
+    packagingOptions {
+        exclude "META-INF/MSFTSIG.SF"
+        exclude "META-INF/MSFTSIG.RSA"
+        exclude 'META-INF/DEPENDENCIES'
+        exclude 'META-INF/NOTICE'
+        exclude 'META-INF/LICENSE'
+        exclude 'META-INF/LICENSE.md'
+        exclude 'META-INF/LICENSE.txt'
+        exclude 'META-INF/NOTICE.txt'
+        exclude 'thirdpartynotice.txt'
+        exclude 'META-INF/INDEX.LIST'
+    }
 }
 
 dependencies {
@@ -33,6 +45,7 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.2.0'
     implementation 'com.google.android.material:material:1.2.1'
     implementation 'androidx.constraintlayout:constraintlayout:2.0.1'
+    implementation 'com.microsoft.azure.sdk.iot:iot-device-client:1.31.0'
     testImplementation 'junit:junit:4.+'
     androidTestImplementation 'androidx.test.ext:junit:1.1.2'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.3.0'
