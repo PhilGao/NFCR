@@ -27,9 +27,12 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-
 import com.microsoft.azure.sdk.iot.device.DeviceClient;
+import com.microsoft.azure.sdk.iot.device.DeviceTwin.DeviceMethodCallback;
 import com.microsoft.azure.sdk.iot.device.IotHubClientProtocol;
+import com.microsoft.azure.sdk.iot.device.IotHubEventCallback;
+import com.microsoft.azure.sdk.iot.device.IotHubMessageResult;
+import com.microsoft.azure.sdk.iot.device.IotHubStatusCode;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -43,11 +46,9 @@ public class MainActivity extends AppCompatActivity {
             "https://iotdemosga01.z13.web.core.windows.net/badge.html"
     };
 
-    private final String connString = "HostName=myiotdemo.azure-devices.net;DeviceId=pos01;SharedAccessKey=9fb5GUjjCZNRFXKqtI6+9A6Bqmdb75ijRxDLei64VWk=";
-    // BuildConfig.DeviceConnectionString;
+    private final String connString = BuildConfig.DeviceConnectionString;
     private DeviceClient client;
     IotHubClientProtocol protocol = IotHubClientProtocol.MQTT;
-
 
     NfcAdapter nfcAdapter;
     TextView nfcTextView;
@@ -70,7 +71,7 @@ public class MainActivity extends AppCompatActivity {
             }
             if (msg.what == 2) {
                 String text = (String) msg.obj;
-                nfcTextView.append(text);
+                nfcTextView.append(text+"\r\n");
             }
         }
     };
@@ -94,6 +95,13 @@ public class MainActivity extends AppCompatActivity {
         nfcEditText = (EditText) findViewById(R.id.editTextNFC);
         buttonWriteIn = (Button) findViewById(R.id.buttonWriteIn);
         techListsArray = new String[][]{{NfcA.class.getName()}, {NfcB.class.getName()}, {IsoDep.class.getName()}, {NfcV.class.getName()}, {NfcF.class.getName()},};
+
+        try {
+            initClient();
+        } catch (URISyntaxException | IOException e) {
+            e.printStackTrace();
+        }
+
 
         IntentFilter ndef = new IntentFilter(NfcAdapter.ACTION_NDEF_DISCOVERED);
         try {
@@ -142,8 +150,38 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    private void initClient() throws URISyntaxException {
+    private void initClient() throws URISyntaxException, IOException {
         client = new DeviceClient(connString, protocol);
+        try {
+            client.registerConnectionStatusChangeCallback(new IotHubConnectionStatusChangeCallbackLogger(), new Object());
+            client.open();
+            client.setMessageCallback((message, callbackContext) -> {
+                Log.d("IOT", "Received message with content: " + new String(message.getBytes(), com.microsoft.azure.sdk.iot.device.Message.DEFAULT_IOTHUB_MESSAGE_CHARSET));
+                return IotHubMessageResult.COMPLETE;
+            }, null);
+
+            client.subscribeToDeviceMethod(
+                    (DeviceMethodCallback) (methodName, methodData, context) -> null,
+                    getApplicationContext(),
+                    new EventCallback()
+                    , null);
+        } catch (Exception e) {
+            Log.e("IOT", "Exception while opening IoTHub connection: " + e);
+            client.closeNow();
+            Log.e("IOT", "Shutting down...");
+        }
+    }
+
+    class EventCallback implements IotHubEventCallback {
+        public void execute(IotHubStatusCode status, Object context) {
+
+            String result = "IoT Hub responded to message " + context.toString()
+                    + " with status " + status.name();
+            Log.d("IOT", result);
+            Log.d("IOT", "EventCallBack from Event Hub");
+            String finalResult = result+"\r\n";
+            handler.post(() -> nfcTextView.append(finalResult));
+        }
     }
 
     public Tag parseIntent(Intent intent) {
@@ -208,9 +246,16 @@ public class MainActivity extends AppCompatActivity {
                 NdefMessage ndefMessage = ndef.getNdefMessage();
                 NdefRecord[] recorders = ndefMessage.getRecords();
                 for (NdefRecord fRecord : recorders) {
+
                     Log.d("h_kk", String.valueOf(fRecord.getTnf()));
+                    Log.d("h_kk", new String(fRecord.getType()));
                     byte[] payload = fRecord.getPayload();
                     if (payload != null) {
+                        if (new String(fRecord.getType()).equals("com.nfcr:adamaid")) {
+                            client.sendEventAsync(new com.microsoft.azure.sdk.iot.device.Message("{\"adamaid\":\"" + new String(payload) + "\"}"),
+                                    new EventCallback(), "SendNfcAdamaid"
+                            );
+                        }
                         Log.d("h_bl", new String(payload));
                         Log.d("h_bl", byte2HexString(payload));
                         Bundle bundle = new Bundle();
