@@ -11,6 +11,7 @@ import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.nfc.tech.IsoDep;
 import android.nfc.tech.Ndef;
+import android.nfc.tech.NdefFormatable;
 import android.nfc.tech.NfcA;
 import android.nfc.tech.NfcB;
 import android.nfc.tech.NfcF;
@@ -27,6 +28,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.google.gson.Gson;
 import com.microsoft.azure.sdk.iot.device.DeviceClient;
 import com.microsoft.azure.sdk.iot.device.DeviceTwin.DeviceMethodCallback;
 import com.microsoft.azure.sdk.iot.device.IotHubClientProtocol;
@@ -41,7 +43,7 @@ import java.util.Arrays;
 
 public class MainActivity extends AppCompatActivity {
     public static final String[] ADAMA_URL = {
-            "https://cn.bing.com",
+            "",
             "https://iotdemosga01.z13.web.core.windows.net/kohinor.html",
             "https://iotdemosga01.z13.web.core.windows.net/badge.html"
     };
@@ -71,7 +73,7 @@ public class MainActivity extends AppCompatActivity {
             }
             if (msg.what == 2) {
                 String text = (String) msg.obj;
-                nfcTextView.append(text+"\r\n");
+                nfcTextView.append(text + "\r\n");
             }
         }
     };
@@ -127,8 +129,11 @@ public class MainActivity extends AppCompatActivity {
         }
         buttonWriteIn.setOnClickListener(v -> {
             assert tag != null;
+            if (Arrays.asList(tag.getTechList()).contains("android.nfc.tech.NdefFormatable")) {
+                writeNdefFormatable(tag);
+            }
             if (Arrays.asList(tag.getTechList()).contains("android.nfc.tech.Ndef")) {
-                /*写入格式例如 nfc_code:1 ,如果没有指定:1,则使用测试URL*/
+                /*写入格式例如 nfc_code;1 ,如果没有指定:1,则使用测试URL*/
                 int urlIndex = 0;
                 String text = nfcEditText.getText().toString();
                 String[] splitText = text.split(";");
@@ -142,7 +147,9 @@ public class MainActivity extends AppCompatActivity {
                             "url index is invalid , the url index must between 0 and " + (ADAMA_URL.length - 1)
                             , Toast.LENGTH_SHORT).show();
                 else {
-                    writeNedf(tag, text, urlIndex);
+                    writeNdef(tag, text, urlIndex);
+//                    writeNfcA(tag,text);
+//                    writeNfcAIntital(tag,text);
                 }
             }
 
@@ -179,7 +186,7 @@ public class MainActivity extends AppCompatActivity {
                     + " with status " + status.name();
             Log.d("IOT", result);
             Log.d("IOT", "EventCallBack from Event Hub");
-            String finalResult = result+"\r\n";
+            String finalResult = result + "\r\n";
             handler.post(() -> nfcTextView.append(finalResult));
         }
     }
@@ -210,7 +217,7 @@ public class MainActivity extends AppCompatActivity {
                 //读取06之后的4个字节
                 byte[] SELECT = {
                         (byte) 0x3A,
-                        (byte) 0x04,
+                        (byte) 0x01,
                         (byte) 0x27,
                 };
                 byte[] response = nfca.transceive(SELECT);
@@ -235,7 +242,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    public void readNedf(Tag tag) {
+    public void readNdef(Tag tag) {
         Ndef ndef = Ndef.get(tag);
         if (ndef != null)
             Log.d("h_bl", ndef.toString());
@@ -243,21 +250,32 @@ public class MainActivity extends AppCompatActivity {
             try {
                 assert ndef != null;
                 ndef.connect();
+                if (ndef.isWritable()) {
+                    Log.d("h_28282", "Tag is writable");
+                }
                 NdefMessage ndefMessage = ndef.getNdefMessage();
+                if (ndefMessage == null) {
+                    ndef.close();
+                    writeNfcAInitial(tag);
+                    return;
+                }
                 NdefRecord[] recorders = ndefMessage.getRecords();
                 for (NdefRecord fRecord : recorders) {
-
-                    Log.d("h_kk", String.valueOf(fRecord.getTnf()));
-                    Log.d("h_kk", new String(fRecord.getType()));
+                    Log.d("h_readNdef", String.valueOf(fRecord.getTnf()));
+                    Log.d("h_readNdef", new String(fRecord.getType()));
                     byte[] payload = fRecord.getPayload();
                     if (payload != null) {
                         if (new String(fRecord.getType()).equals("com.nfcr:adamaid")) {
-                            client.sendEventAsync(new com.microsoft.azure.sdk.iot.device.Message("{\"adamaid\":\"" + new String(payload) + "\"}"),
+                            //send nfc token & nfc id to iot
+                            AdamaMessage adamaMessage = new AdamaMessage(new String(payload));
+                            Gson gson = new Gson();
+                            String message = gson.toJson(adamaMessage);
+                            client.sendEventAsync(new com.microsoft.azure.sdk.iot.device.Message(message),
                                     new EventCallback(), "SendNfcAdamaid"
                             );
                         }
-                        Log.d("h_bl", new String(payload));
-                        Log.d("h_bl", byte2HexString(payload));
+                        Log.d("h_readNdef", new String(payload));
+                        Log.d("h_readNdef", byte2HexString(payload));
                         Bundle bundle = new Bundle();
                         bundle.putString("hex", byte2HexString(payload));
                         bundle.putString("ASCII", new String(payload));
@@ -269,11 +287,27 @@ public class MainActivity extends AppCompatActivity {
                 }
                 ndef.close();
             } catch (IOException | FormatException e) {
-                Toast.makeText(MainActivity.this, e.getMessage(), Toast.LENGTH_SHORT).show();
                 e.printStackTrace();
             }
 
         }).start();
+    }
+
+    public void writeNfcAInitial(Tag tag) {
+
+        NfcA nfca = NfcA.get(tag);
+        byte[] WRITE = {(byte) 0xA2, (byte) 0x05, (byte) 0x34, (byte) 0x03, (byte) 0x10, (byte) 0xD1};
+        if (nfca != null) {
+            Log.e("e_bl", nfca.toString());
+            try {
+                nfca.connect();
+                byte[] response = nfca.transceive(WRITE);
+                Log.d("h_ii", byte2HexString(response));
+                nfca.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
 
@@ -290,6 +324,8 @@ public class MainActivity extends AppCompatActivity {
                 Log.d("h_bl", String.valueOf(nfca.getSak()));
                 byte[] messageBytes = nfcCode.getBytes(StandardCharsets.US_ASCII);
                 byte[] WRITE = new byte[6];
+
+                nfca.transceive(WRITE);
 
                 /*Empty the page from 6 to 30**/
                 for (int page = 6; page <= 30; page++) {
@@ -325,7 +361,28 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    public void writeNedf(Tag tag, String nfcCode, int urlIndex) {
+    public void writeNdefFormatable(Tag tag) {
+        NdefFormatable nfcdf = NdefFormatable.get(tag);
+        if (nfcdf != null)
+            Log.e("e_bl", nfcdf.toString());
+        new Thread(() -> {
+            try {
+                assert nfcdf != null;
+                nfcdf.connect();
+                nfcdf.format(null);
+                Message message = Message.obtain();
+                message.obj = "nfcdf Forged!";
+                message.what = 2;
+                handler.sendMessage(message);
+                nfcdf.close();
+            } catch (IOException | FormatException e) {
+                e.printStackTrace();
+            }
+
+        }).start();
+    }
+
+    public void writeNdef(Tag tag, String nfcCode, int urlIndex) {
         String url = ADAMA_URL[urlIndex];
         Ndef ndef = Ndef.get(tag);
         if (ndef != null)
@@ -339,7 +396,6 @@ public class MainActivity extends AppCompatActivity {
                 String type = "AdamaID";
                 NdefRecord extRecord = NdefRecord.createExternal(domain, type, nfcCode.getBytes(StandardCharsets.US_ASCII));
                 NdefMessage ndefMessage = new NdefMessage(rtdUriRecord, extRecord);
-
                 ndef.writeNdefMessage(ndefMessage);
                 Message message = Message.obtain();
                 message.obj = nfcCode + ";" + url + " Forged!";
@@ -370,11 +426,10 @@ public class MainActivity extends AppCompatActivity {
         if (NfcAdapter.ACTION_TECH_DISCOVERED.equals(intent.getAction())) {
             Log.d("h_bl", "onNewIntent");
             tag = parseIntent(intent);
+            Log.d("h_bl", Arrays.toString(tag.getTechList()));
             if (tag != null) {
                 if (Arrays.asList(tag.getTechList()).contains("android.nfc.tech.Ndef")) {
-                    readNedf(tag);
-                } else if (Arrays.asList(tag.getTechList()).contains("android.nfc.tech.NfcA")) {
-                    readNfcA(tag);
+                    readNdef(tag);
                 }
             }
         }
