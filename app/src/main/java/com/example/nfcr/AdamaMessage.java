@@ -29,7 +29,7 @@ public class AdamaMessage {
         SimpleDateFormat ssdf = new SimpleDateFormat("yyMMddHHmmssms");
         EntryDatetime = sdf.format(d);
         AccountId ="0x71be63f3384f5fb98995898a86b02fb2426c5788";
-        DeviceId = "device03";
+        DeviceId = "device01";
         BottleToken = byte2HexString(ssdf.format(d).getBytes(StandardCharsets.UTF_8));
         NFCId = nfcId;
     }

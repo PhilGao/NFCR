@@ -3,6 +3,14 @@ plugins {
 }
 
 android {
+    signingConfigs {
+        release {
+            storeFile file('C:\\Users\\hao.a.gao\\Desktop\\jks\\nfcr.jks')
+            storePassword '123789'
+            keyAlias 'nfcr'
+            keyPassword '123789'
+        }
+    }
     compileSdkVersion 30
     buildToolsVersion "30.0.3"
 
@@ -40,6 +48,14 @@ android {
         exclude 'META-INF/INDEX.LIST'
         exclude 'META-INF/NOTICE.md'
         exclude 'META-INF/io.netty.versions.properties'
+    }
+    flavorDimensions 'ava'
+    productFlavors {
+        ava {
+            dimension 'ava'
+            applicationId 'com.example.NFCR'
+            signingConfig signingConfigs.release
+        }
     }
 }
 
